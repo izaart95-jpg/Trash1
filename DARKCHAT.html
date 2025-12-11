@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashChat - Real-time Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #2f3136; }
+        ::-webkit-scrollbar-thumb { background: #202225; border-radius: 3px; }
+        .emoji-picker { display: none; }
+        .emoji-picker.active { display: grid; }
+        .message:hover .message-actions { opacity: 1; }
+        .message-actions { opacity: 0; transition: opacity 0.2s; }
+        .online-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .typing-indicator span { animation: bounce 1.4s infinite ease-in-out; }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        .channel-item.active { background: rgba(79, 84, 92, 0.6); }
+        .user-item:hover { background: rgba(79, 84, 92, 0.4); }
+        .reaction { transition: all 0.15s; }
+        .reaction:hover { transform: scale(1.2); }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-[#36393f] text-gray-100 h-screen overflow-hidden">
+    <!-- Welcome Modal -->
+    <div id="welcomeModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+        <div class="bg-[#36393f] rounded-xl p-8 max-w-md w-full mx-4 shadow-2xl border border-[#4f545c]">
+            <div class="text-center mb-6">
+                <div class="text-5xl mb-4">⚡</div>
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-500 bg-clip-text text-transparent">FlashChat</h1>
+                <p class="text-gray-400 mt-2">Lightning-fast group messaging</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-sm text-gray-400 mb-1 block">Your Name</label>
+                    <input type="text" id="usernameInput" placeholder="Enter your name..." 
+                        class="w-full bg-[#202225] border border-[#4f545c] rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 transition">
+                </div>
+                <div>
+                    <label class="text-sm text-gray-400 mb-1 block">Choose Avatar</label>
+                    <div class="flex gap-2 flex-wrap" id="avatarPicker">
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="😀">😀</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="😎">😎</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🦊">🦊</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🐱">🐱</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🐶">🐶</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🦄">🦄</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🚀">🚀</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="⭐">⭐</button>
+                    </div>
+                </div>
+                <button id="joinBtn" class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 py-3 rounded-lg font-semibold transition transform hover:scale-[1.02] mt-4">
+                    Join Chat ⚡
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden h-full flex">
+        <!-- Sidebar -->
+        <div class="w-72 bg-[#2f3136] flex flex-col">
+            <!-- Server Header -->
+            <div class="h-14 px-4 flex items-center justify-between border-b border-[#202225] shadow-md">
+                <h2 class="font-bold text-lg">⚡ FlashChat</h2>
+                <button id="settingsBtn" class="p-2 hover:bg-[#4f545c] rounded-lg transition">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="flex border-b border-[#202225]">
+                <button class="nav-tab flex-1 py-3 text-sm font-medium transition active" data-tab="channels">Channels</button>
+                <button class="nav-tab flex-1 py-3 text-sm font-medium transition" data-tab="dms">DMs</button>
+                <button class="nav-tab flex-1 py-3 text-sm font-medium transition" data-tab="online">Online</button>
+            </div>
+
+            <!-- Channels List -->
+            <div id="channelsTab" class="tab-content flex-1 overflow-y-auto p-2">
+                <div class="text-xs text-gray-400 font-semibold px-2 py-2 uppercase">📢 Announcements</div>
+                <div class="channel-item px-3 py-2 rounded-lg cursor-pointer hover:bg-[#4f545c]/40 transition flex items-center gap-2" data-channel="announcements">
+                    <span class="text-gray-400">📢</span>
+                    <span>announcements</span>
+                    <span id="announceBadge" class="ml-auto bg-red-500 text-xs px-2 rounded-full hidden">0</span>
+                </div>
+                <div class="text-xs text-gray-400 font-semibold px-2 py-2 mt-3 uppercase">💬 Text Channels</div>
+                <div class="channel-item active px-3 py-2 rounded-lg cursor-pointer hover:bg-[#4f545c]/40 transition flex items-center gap-2" data-channel="general">
+                    <span class="text-gray-400">#</span>
+                    <span>general</span>
+                    <span id="generalBadge" class="ml-auto bg-red-500 text-xs px-2 rounded-full hidden">0</span>
+                </div>
+                <div class="channel-item px-3 py-2 rounded-lg cursor-pointer hover:bg-[#4f545c]/40 transition flex items-center gap-2" data-channel="media">
+                    <span class="text-gray-400">🖼️</span>
+                    <span>media</span>
+                    <span id="mediaBadge" class="ml-auto bg-red-500 text-xs px-2 rounded-full hidden">0</span>
+                </div>
+            </div>
+
+            <!-- DMs List -->
+            <div id="dmsTab" class="tab-content flex-1 overflow-y-auto p-2 hidden">
+                <div class="relative mb-3">
+                    <input type="text" id="dmSearch" placeholder="Search users..." 
+                        class="w-full bg-[#202225] rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div id="dmsList" class="space-y-1"></div>
+            </div>
+
+            <!-- Online Users -->
+            <div id="onlineTab" class="tab-content flex-1 overflow-y-auto p-2 hidden">
+                <div class="text-xs text-gray-400 font-semibold px-2 py-2 uppercase">🟢 Online — <span id="onlineCount">0</span></div>
+                <div id="onlineList" class="space-y-1"></div>
+            </div>
+
+            <!-- User Info -->
+            <div class="p-3 bg-[#292b2f] flex items-center gap-3">
+                <div class="relative">
+                    <div id="userAvatar" class="w-10 h-10 rounded-full bg-[#4f545c] flex items-center justify-center text-xl">😀</div>
+                    <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-[#292b2f] online-dot"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div id="userDisplayName" class="font-medium truncate">User</div>
+                    <div class="text-xs text-gray-400" id="userRole">Member</div>
+                </div>
+                <button id="adminPanelBtn" class="p-2 hover:bg-[#4f545c] rounded-lg transition hidden" title="Admin Panel">
+                    <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="flex-1 flex flex-col bg-[#36393f]">
+            <!-- Channel Header -->
+            <div class="h-14 px-4 flex items-center justify-between border-b border-[#202225] shadow-sm">
+                <div class="flex items-center gap-2">
+                    <span id="currentChannelIcon" class="text-gray-400">#</span>
+                    <span id="currentChannelName" class="font-bold">general</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="typingStatus" class="text-sm text-gray-400 hidden">
+                        <span class="typing-indicator inline-flex gap-1 mr-2">
+                            <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                            <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                            <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                        </span>
+                        Someone is typing...
+                    </span>
+                </div>
+            </div>
+
+            <!-- Messages Container -->
+            <div id="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="text-center py-8">
+                    <div class="text-6xl mb-4">🎉</div>
+                    <h3 class="text-2xl font-bold mb-2">Welcome to #general!</h3>
+                    <p class="text-gray-400">This is the beginning of the conversation.</p>
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div id="messageInputArea" class="p-4">
+                <div class="bg-[#40444b] rounded-xl p-2">
+                    <div class="flex items-center gap-2">
+                        <label class="p-2 hover:bg-[#4f545c] rounded-lg cursor-pointer transition">
+                            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            <input type="file" id="fileInput" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip">
+                        </label>
+                        <input type="text" id="messageInput" placeholder="Message #general" 
+                            class="flex-1 bg-transparent py-2 focus:outline-none">
+                        <button id="emojiBtn" class="p-2 hover:bg-[#4f545c] rounded-lg transition relative">
+                            <span class="text-xl">😀</span>
+                        </button>
+                        <button id="sendBtn" class="p-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg transition">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+                        </button>
+                    </div>
+                    <!-- File Preview -->
+                    <div id="filePreview" class="hidden mt-2 p-2 bg-[#36393f] rounded-lg flex items-center gap-2">
+                        <div id="filePreviewContent" class="flex-1 flex items-center gap-2"></div>
+                        <button id="cancelFile" class="text-red-400 hover:text-red-300">✕</button>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2 text-center">Max 25MB. For larger files, use <a href="https://send-anywhere.com" target="_blank" class="text-indigo-400 hover:underline">send-anywhere.com</a> (up to 30GB)</p>
+            </div>
+        </div>
+
+        <!-- Emoji Picker -->
+        <div id="emojiPicker" class="emoji-picker fixed bg-[#2f3136] rounded-xl shadow-2xl border border-[#4f545c] p-3 grid grid-cols-8 gap-1 z-50" style="bottom: 80px; right: 20px;">
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">😀</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">😂</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">😍</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🤔</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">😢</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">😡</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">👍</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">👎</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">❤️</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🔥</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🎉</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">✨</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">💯</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🚀</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">💀</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🤡</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">😭</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">💪</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🙏</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">👀</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🤝</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🎯</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">💡</button>
+            <button class="emoji-btn text-2xl p-1 hover:bg-[#4f545c] rounded transition">🌟</button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center">
+        <div class="bg-[#36393f] rounded-xl max-w-lg w-full mx-4 shadow-2xl border border-[#4f545c]">
+            <div class="p-4 border-b border-[#4f545c] flex justify-between items-center">
+                <h2 class="text-xl font-bold">⚙️ Settings</h2>
+                <button id="closeSettings" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6 space-y-6">
+                <div>
+                    <label class="text-sm text-gray-400 mb-2 block">Display Name</label>
+                    <input type="text" id="settingsName" class="w-full bg-[#202225] border border-[#4f545c] rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="text-sm text-gray-400 mb-2 block">Avatar</label>
+                    <div class="flex gap-2 flex-wrap" id="settingsAvatarPicker">
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="😀">😀</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="😎">😎</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🦊">🦊</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🐱">🐱</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🐶">🐶</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🦄">🦄</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="🚀">🚀</button>
+                        <button class="avatar-option w-12 h-12 rounded-full text-2xl bg-[#202225] hover:bg-[#4f545c] transition" data-avatar="⭐">⭐</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm text-gray-400 mb-2 block">Or upload custom avatar</label>
+                    <input type="file" id="customAvatarInput" accept="image/*" class="w-full bg-[#202225] border border-[#4f545c] rounded-lg px-4 py-3">
+                </div>
+                <button id="saveSettings" class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 py-3 rounded-lg font-semibold transition">
+                    Save Changes
+                </button>
+                <button id="logoutBtn" class="w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 py-3 rounded-lg font-semibold transition">
+                    Logout
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div id="adminModal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center">
+        <div class="bg-[#36393f] rounded-xl max-w-2xl w-full mx-4 shadow-2xl border border-[#4f545c] max-h-[80vh] overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-[#4f545c] flex justify-between items-center">
+                <h2 class="text-xl font-bold">🛡️ Admin Panel</h2>
+                <button id="closeAdmin" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6 space-y-6 overflow-y-auto">
+                <!-- Send Announcement -->
+                <div class="bg-[#2f3136] p-4 rounded-xl">
+                    <h3 class="font-semibold mb-3 flex items-center gap-2">📢 Send Announcement</h3>
+                    <textarea id="announcementText" rows="3" class="w-full bg-[#202225] border border-[#4f545c] rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 resize-none" placeholder="Write your announcement..."></textarea>
+                    <button id="sendAnnouncement" class="mt-2 bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg font-medium transition">Send Announcement</button>
+                </div>
+                <!-- Manage Users -->
+                <div class="bg-[#2f3136] p-4 rounded-xl">
+                    <h3 class="font-semibold mb-3 flex items-center gap-2">👥 Manage Users</h3>
+                    <div id="adminUserList" class="space-y-2 max-h-60 overflow-y-auto"></div>
+                </div>
+                <!-- Clear Messages -->
+                <div class="bg-[#2f3136] p-4 rounded-xl">
+                    <h3 class="font-semibold mb-3 flex items-center gap-2">🧹 Channel Management</h3>
+                    <button id="clearChannel" class="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-lg font-medium transition mr-2">Clear Current Channel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Message Modal -->
+    <div id="editModal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center">
+        <div class="bg-[#36393f] rounded-xl max-w-lg w-full mx-4 shadow-2xl border border-[#4f545c]">
+            <div class="p-4 border-b border-[#4f545c] flex justify-between items-center">
+                <h2 class="text-xl font-bold">✏️ Edit Message</h2>
+                <button id="closeEdit" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <textarea id="editMessageText" rows="3" class="w-full bg-[#202225] border border-[#4f545c] rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+                <div class="flex gap-2">
+                    <button id="saveEdit" class="flex-1 bg-indigo-500 hover:bg-indigo-600 py-2 rounded-lg font-medium transition">Save</button>
+                    <button id="cancelEdit" class="flex-1 bg-gray-600 hover:bg-gray-700 py-2 rounded-lg font-medium transition">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reaction Picker -->
+    <div id="reactionPicker" class="fixed bg-[#2f3136] rounded-xl shadow-2xl border border-[#4f545c] p-2 hidden z-50 flex gap-1">
+        <button class="reaction-btn text-xl p-1 hover:bg-[#4f545c] rounded transition">👍</button>
+        <button class="reaction-btn text-xl p-1 hover:bg-[#4f545c] rounded transition">❤️</button>
+        <button class="reaction-btn text-xl p-1 hover:bg-[#4f545c] rounded transition">😂</button>
+        <button class="reaction-btn text-xl p-1 hover:bg-[#4f545c] rounded transition">😮</button>
+        <button class="reaction-btn text-xl p-1 hover:bg-[#4f545c] rounded transition">😢</button>
+        <button class="reaction-btn text-xl p-1 hover:bg-[#4f545c] rounded transition">🔥</button>
+    </div>
+
+    <script>
+        // ============================================
+        // FlashChat - Production Ready Chat Application
+        // ============================================
+
+        const APP_CONFIG = {
+            MAX_FILE_SIZE: 25 * 1024 * 1024, // 25MB
+            MESSAGE_EDIT_TIMEOUT: 5 * 60 * 1000, // 5 minutes
+            USER_EXPIRY_DAYS: 7,
+            ADMIN_KEY: 'flashchat_superadmin', // Type this as username to become admin
+        };
+
+        // State Management
+        let state = {
+            currentUser: null,
+            currentChannel: 'general',
+            currentDM: null,
+            selectedAvatar: '😀',
+            selectedFile: null,
+            editingMessageId: null,
+            reactionTargetId: null,
+        };
+
+        // Storage Keys
+        const STORAGE_KEYS = {
+            USER: 'flashchat_user',
+            MESSAGES: 'flashchat_messages',
+            USERS: 'flashchat_users',
+            DMS: 'flashchat_dms',
+        };
+
+        // BroadcastChannel for real-time sync across tabs
+        const channel = new BroadcastChannel('flashchat_sync');
+
+        // ============================================
+        // Utility Functions
+        // ============================================
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) {
+                return 'Today at ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } else if (diffDays === 1) {
+                return 'Yesterday at ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function getStorage(key) {
+            try {
+                return JSON.parse(localStorage.getItem(key)) || (key.includes('messages') || key.includes('users') || key.includes('dms') ? {} : null);
+            } catch {
+                return key.includes('messages') || key.includes('users') || key.includes('dms') ? {} : null;
+            }
+        }
+
+        function setStorage(key, data) {
+            localStorage.setItem(key, JSON.stringify(data));
+        }
+
+        // ============================================
+        // User Management
+        // ============================================
+
+        function initUser() {
+            const savedUser = getStorage(STORAGE_KEYS.USER);
+            if (savedUser && savedUser.name) {
+                state.currentUser = savedUser;
+                state.selectedAvatar = savedUser.avatar;
+                showMainApp();
+                updateUserDisplay();
+                registerUser();
+            } else {
+                document.getElementById('welcomeModal').classList.remove('hidden');
+            }
+        }
+
+        function registerUser() {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            users[state.currentUser.id] = {
+                ...state.currentUser,
+                lastSeen: Date.now(),
+                online: true
+            };
+            setStorage(STORAGE_KEYS.USERS, users);
+            broadcastEvent('user_update', users);
+            cleanOldUsers();
+        }
+
+        function cleanOldUsers() {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            const cutoff = Date.now() - (APP_CONFIG.USER_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+            Object.keys(users).forEach(id => {
+                if (users[id].lastSeen < cutoff) {
+                    delete users[id];
+                }
+            });
+            setStorage(STORAGE_KEYS.USERS, users);
+        }
+
+        function updateUserStatus(online) {
+            if (!state.currentUser) return;
+            const users = getStorage(STORAGE_KEYS.USERS);
+            if (users[state.currentUser.id]) {
+                users[state.currentUser.id].online = online;
+                users[state.currentUser.id].lastSeen = Date.now();
+                setStorage(STORAGE_KEYS.USERS, users);
+                broadcastEvent('user_update', users);
+            }
+        }
+
+        // ============================================
+        // Message Management
+        // ============================================
+
+        function getMessages(channelOrDM) {
+            const messages = getStorage(STORAGE_KEYS.MESSAGES);
+            return messages[channelOrDM] || [];
+        }
+
+        function saveMessage(channelOrDM, message) {
+            const messages = getStorage(STORAGE_KEYS.MESSAGES);
+            if (!messages[channelOrDM]) messages[channelOrDM] = [];
+            messages[channelOrDM].push(message);
+            setStorage(STORAGE_KEYS.MESSAGES, messages);
+            broadcastEvent('new_message', { channel: channelOrDM, message });
+        }
+
+        function updateMessage(channelOrDM, messageId, updates) {
+            const messages = getStorage(STORAGE_KEYS.MESSAGES);
+            if (messages[channelOrDM]) {
+                const idx = messages[channelOrDM].findIndex(m => m.id === messageId);
+                if (idx !== -1) {
+                    messages[channelOrDM][idx] = { ...messages[channelOrDM][idx], ...updates };
+                    setStorage(STORAGE_KEYS.MESSAGES, messages);
+                    broadcastEvent('message_update', { channel: channelOrDM });
+                }
+            }
+        }
+
+        function deleteMessage(channelOrDM, messageId) {
+            const messages = getStorage(STORAGE_KEYS.MESSAGES);
+            if (messages[channelOrDM]) {
+                messages[channelOrDM] = messages[channelOrDM].filter(m => m.id !== messageId);
+                setStorage(STORAGE_KEYS.MESSAGES, messages);
+                broadcastEvent('message_update', { channel: channelOrDM });
+            }
+        }
+
+        function clearChannelMessages(channelName) {
+            const messages = getStorage(STORAGE_KEYS.MESSAGES);
+            messages[channelName] = [];
+            setStorage(STORAGE_KEYS.MESSAGES, messages);
+            broadcastEvent('message_update', { channel: channelName });
+            renderMessages();
+        }
+
+        // ============================================
+        // Broadcast / Real-time Sync
+        // ============================================
+
+        function broadcastEvent(type, data) {
+            channel.postMessage({ type, data, sender: state.currentUser?.id });
+        }
+
+        channel.onmessage = (event) => {
+            const { type, data, sender } = event.data;
+            if (sender === state.currentUser?.id) return;
+
+            switch (type) {
+                case 'new_message':
+                    if (data.channel === state.currentChannel || data.channel === state.currentDM) {
+                        renderMessages();
+                    }
+                    break;
+                case 'message_update':
+                    if (data.channel === state.currentChannel || data.channel === state.currentDM) {
+                        renderMessages();
+                    }
+                    break;
+                case 'user_update':
+                    renderOnlineUsers();
+                    renderDMsList();
+                    break;
+                case 'typing':
+                    if (data.channel === state.currentChannel) {
+                        showTypingIndicator(data.user);
+                    }
+                    break;
+            }
+        };
+
+        // ============================================
+        // UI Rendering
+        // ============================================
+
+        function showMainApp() {
+            document.getElementById('welcomeModal').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('flex');
+            renderMessages();
+            renderOnlineUsers();
+            renderDMsList();
+        }
+
+        function updateUserDisplay() {
+            document.getElementById('userAvatar').textContent = state.currentUser.avatar;
+            if (state.currentUser.customAvatar) {
+                document.getElementById('userAvatar').innerHTML = `<img src="${state.currentUser.customAvatar}" class="w-full h-full rounded-full object-cover">`;
+            }
+            document.getElementById('userDisplayName').textContent = state.currentUser.name;
+            document.getElementById('userDisplayName').className = state.currentUser.isAdmin ? 
+                'font-medium truncate text-red-400' : 'font-medium truncate';
+            document.getElementById('userRole').textContent = state.currentUser.isAdmin ? 'Admin' : 'Member';
+            document.getElementById('adminPanelBtn').classList.toggle('hidden', !state.currentUser.isAdmin);
+        }
+
+        function renderMessages() {
+            const container = document.getElementById('messagesContainer');
+            const targetChannel = state.currentDM || state.currentChannel;
+            const messages = getMessages(targetChannel);
+            
+            const channelNames = {
+                general: '#general',
+                media: '#media',
+                announcements: '📢 Announcements'
+            };
+            
+            const welcomeText = state.currentDM ? 
+                `Start of your conversation` :
+                `Welcome to ${channelNames[targetChannel] || targetChannel}!`;
+
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 fade-in">
+                        <div class="text-6xl mb-4">${state.currentDM ? '💬' : '🎉'}</div>
+                        <h3 class="text-2xl font-bold mb-2">${welcomeText}</h3>
+                        <p class="text-gray-400">This is the beginning of the conversation.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = messages.map(msg => renderMessage(msg)).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function renderMessage(msg) {
+            const isOwn = msg.userId === state.currentUser?.id;
+            const isAdmin = msg.isAdmin;
+            const canEdit = isOwn && (Date.now() - msg.timestamp < APP_CONFIG.MESSAGE_EDIT_TIMEOUT);
+            const canDelete = isOwn || state.currentUser?.isAdmin;
+
+            const roleClass = isAdmin ? 
+                'text-red-400 border border-red-500/50 px-2 py-0.5 rounded text-xs' : 
+                'text-gray-400 border border-gray-600/50 px-2 py-0.5 rounded text-xs';
+            const roleText = isAdmin ? 'ADMIN' : 'MEMBER';
+
+            let contentHtml = '';
+            if (msg.file) {
+                if (msg.file.type.startsWith('image/')) {
+                    contentHtml = `<img src="${msg.file.data}" class="max-w-md rounded-lg mt-2 cursor-pointer hover:opacity-90" onclick="window.open('${msg.file.data}')">`;
+                } else if (msg.file.type.startsWith('video/')) {
+                    contentHtml = `<video src="${msg.file.data}" controls class="max-w-md rounded-lg mt-2"></video>`;
+                } else if (msg.file.type.startsWith('audio/')) {
+                    contentHtml = `<audio src="${msg.file.data}" controls class="mt-2"></audio>`;
+                } else {
+                    contentHtml = `
+                        <div class="mt-2 bg-[#2f3136] p-3 rounded-lg flex items-center gap-3 max-w-xs">
+                            <span class="text-3xl">📎</span>
+                            <div class="flex-1 min-w-0">
+                                <div class="truncate font-medium">${msg.file.name}</div>
+                                <div class="text-xs text-gray-400">${(msg.file.size / 1024).toFixed(1)} KB</div>
+                            </div>
+                            <a href="${msg.file.data}" download="${msg.file.name}" class="text-indigo-400 hover:text-indigo-300">⬇️</a>
+                        </div>
+                    `;
+                }
+            }
+
+            const reactionsHtml = msg.reactions ? Object.entries(msg.reactions).map(([emoji, users]) => `
+                <button class="reaction bg-[#4f545c]/50 hover:bg-[#4f545c] px-2 py-1 rounded-full text-sm flex items-center gap-1 ${users.includes(state.currentUser?.id) ? 'ring-2 ring-indigo-500' : ''}" 
+                    onclick="toggleReaction('${msg.id}', '${emoji}')">
+                    ${emoji} <span class="text-xs">${users.length}</span>
+                </button>
+            `).join('') : '';
+
+            const avatarHtml = msg.customAvatar ? 
+                `<img src="${msg.customAvatar}" class="w-10 h-10 rounded-full object-cover">` :
+                `<div class="w-10 h-10 rounded-full bg-[#4f545c] flex items-center justify-center text-xl">${msg.avatar}</div>`;
+
+            return `
+                <div class="message group flex gap-4 hover:bg-[#32353b] -mx-4 px-4 py-2 rounded fade-in" data-id="${msg.id}">
+                    <div class="relative flex-shrink-0">
+                        ${avatarHtml}
+                        ${msg.online !== false ? '<div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#36393f]"></div>' : '<div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-gray-500 rounded-full border-2 border-[#36393f]"></div>'}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-semibold ${isAdmin ? 'text-red-400' : ''}">${msg.userName}</span>
+                            <span class="${roleClass}">${roleText}</span>
+                            <span class="text-xs text-gray-500">${formatTime(msg.timestamp)}</span>
+                            ${msg.edited ? '<span class="text-xs text-gray-500">(edited)</span>' : ''}
+                        </div>
+                        <div class="text-gray-100 mt-1 break-words">${msg.content || ''}</div>
+                        ${contentHtml}
+                        <div class="flex gap-1 mt-2 flex-wrap">${reactionsHtml}</div>
+                    </div>
+                    <div class="message-actions flex items-start gap-1">
+                        <button onclick="showReactionPicker(event, '${msg.id}')" class="p-1 hover:bg-[#4f545c] rounded transition" title="Add Reaction">😀</button>
+                        ${canEdit ? `<button onclick="editMessage('${msg.id}')" class="p-1 hover:bg-[#4f545c] rounded transition" title="Edit">✏️</button>` : ''}
+                        ${canDelete ? `<button onclick="deleteMsg('${msg.id}')" class="p-1 hover:bg-[#4f545c] rounded transition text-red-400" title="Delete">🗑️</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderOnlineUsers() {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            const onlineUsers = Object.values(users).filter(u => u.online);
+            
+            document.getElementById('onlineCount').textContent = onlineUsers.length;
+            document.getElementById('onlineList').innerHTML = onlineUsers.map(user => {
+                const avatarHtml = user.customAvatar ?
+                    `<img src="${user.customAvatar}" class="w-8 h-8 rounded-full object-cover">` :
+                    `<div class="w-8 h-8 rounded-full bg-[#4f545c] flex items-center justify-center">${user.avatar}</div>`;
+                
+                return `
+                    <div class="user-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer" onclick="startDM('${user.id}')">
+                        <div class="relative">
+                            ${avatarHtml}
+                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#2f3136] online-dot"></div>
+                        </div>
+                        <span class="${user.isAdmin ? 'text-red-400' : ''}">${user.name}</span>
+                        ${user.isAdmin ? '<span class="text-xs text-red-400 border border-red-500/50 px-1 rounded">ADMIN</span>' : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderDMsList() {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            const dms = getStorage(STORAGE_KEYS.DMS);
+            const searchTerm = document.getElementById('dmSearch')?.value?.toLowerCase() || '';
+            
+            const relevantUsers = Object.values(users)
+                .filter(u => u.id !== state.currentUser?.id)
+                .filter(u => u.name.toLowerCase().includes(searchTerm));
+
+            document.getElementById('dmsList').innerHTML = relevantUsers.map(user => {
+                const avatarHtml = user.customAvatar ?
+                    `<img src="${user.customAvatar}" class="w-8 h-8 rounded-full object-cover">` :
+                    `<div class="w-8 h-8 rounded-full bg-[#4f545c] flex items-center justify-center">${user.avatar}</div>`;
+                
+                const dmKey = [state.currentUser?.id, user.id].sort().join('_');
+                const lastMsg = dms[dmKey]?.slice(-1)[0];
+                
+                return `
+                    <div class="user-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer ${state.currentDM === dmKey ? 'bg-[#4f545c]/60' : ''}" onclick="startDM('${user.id}')">
+                        <div class="relative">
+                            ${avatarHtml}
+                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 ${user.online ? 'bg-green-500' : 'bg-gray-500'} rounded-full border-2 border-[#2f3136]"></div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="${user.isAdmin ? 'text-red-400' : ''}">${user.name}</div>
+                            ${lastMsg ? `<div class="text-xs text-gray-500 truncate">${lastMsg.content || 'Attachment'}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderAdminUserList() {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            document.getElementById('adminUserList').innerHTML = Object.values(users).map(user => `
+                <div class="flex items-center justify-between bg-[#202225] p-3 rounded-lg">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">${user.avatar}</span>
+                        <span class="${user.isAdmin ? 'text-red-400' : ''}">${user.name}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        ${!user.isAdmin ? `<button onclick="makeAdmin('${user.id}')" class="text-xs bg-indigo-500 hover:bg-indigo-600 px-2 py-1 rounded">Make Admin</button>` : ''}
+                        <button onclick="banUser('${user.id}')" class="text-xs bg-red-500 hover:bg-red-600 px-2 py-1 rounded">Ban</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ============================================
+        // Event Handlers
+        // ============================================
+
+        function showTypingIndicator(userName) {
+            const el = document.getElementById('typingStatus');
+            el.querySelector('span:last-child')?.remove();
+            el.innerHTML += `<span>${userName} is typing...</span>`;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 3000);
+        }
+
+        function startDM(userId) {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            const targetUser = users[userId];
+            if (!targetUser) return;
+
+            state.currentDM = [state.currentUser.id, userId].sort().join('_');
+            state.currentChannel = null;
+            
+            document.getElementById('currentChannelIcon').textContent = '💬';
+            document.getElementById('currentChannelName').textContent = targetUser.name;
+            document.getElementById('messageInput').placeholder = `Message ${targetUser.name}`;
+            
+            document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+            
+            // Switch to DMs tab
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active', 'text-white', 'border-b-2', 'border-indigo-500'));
+            document.querySelector('[data-tab="dms"]').classList.add('active', 'text-white', 'border-b-2', 'border-indigo-500');
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById('dmsTab').classList.remove('hidden');
+            
+            renderMessages();
+            renderDMsList();
+        }
+
+        function switchChannel(channelName) {
+            state.currentChannel = channelName;
+            state.currentDM = null;
+            
+            const icons = { general: '#', media: '🖼️', announcements: '📢' };
+            document.getElementById('currentChannelIcon').textContent = icons[channelName] || '#';
+            document.getElementById('currentChannelName').textContent = channelName;
+            document.getElementById('messageInput').placeholder = `Message #${channelName}`;
+            
+            // Update input visibility for announcements
+            const inputArea = document.getElementById('messageInputArea');
+            if (channelName === 'announcements' && !state.currentUser?.isAdmin) {
+                inputArea.innerHTML = '<p class="text-center text-gray-500 py-4">Only admins can post in announcements</p>';
+            } else {
+                if (!document.getElementById('messageInput')) {
+                    location.reload(); // Quick fix for input restoration
+                }
+            }
+            
+            document.querySelectorAll('.channel-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.channel === channelName);
+            });
+            
+            renderMessages();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input?.value?.trim();
+            const targetChannel = state.currentDM || state.currentChannel;
+
+            if (!content && !state.selectedFile) return;
+            if (!state.currentUser) return;
+
+            const message = {
+                id: generateId(),
+                userId: state.currentUser.id,
+                userName: state.currentUser.name,
+                avatar: state.currentUser.avatar,
+                customAvatar: state.currentUser.customAvatar,
+                isAdmin: state.currentUser.isAdmin,
+                content: content,
+                timestamp: Date.now(),
+                reactions: {},
+                online: true
+            };
+
+            if (state.selectedFile) {
+                message.file = state.selectedFile;
+                state.selectedFile = null;
+                document.getElementById('filePreview').classList.add('hidden');
+            }
+
+            saveMessage(targetChannel, message);
+            input.value = '';
+            renderMessages();
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.size > APP_CONFIG.MAX_FILE_SIZE) {
+                alert(`File too large! Max size is 25MB.\n\nFor larger files, use send-anywhere.com (up to 30GB)`);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                state.selectedFile = {
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data: reader.result
+                };
+
+                const preview = document.getElementById('filePreview');
+                const content = document.getElementById('filePreviewContent');
+                
+                if (file.type.startsWith('image/')) {
+                    content.innerHTML = `<img src="${reader.result}" class="h-16 rounded">`;
+                } else {
+                    content.innerHTML = `<span class="text-2xl">📎</span><span class="truncate">${file.name}</span>`;
+                }
+                
+                preview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function editMessage(msgId) {
+            const targetChannel = state.currentDM || state.currentChannel;
+            const messages = getMessages(targetChannel);
+            const msg = messages.find(m => m.id === msgId);
+            if (!msg) return;
+
+            state.editingMessageId = msgId;
+            document.getElementById('editMessageText').value = msg.content;
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('editModal').classList.add('flex');
+        }
+
+        function saveEditedMessage() {
+            const content = document.getElementById('editMessageText').value.trim();
+            if (!content || !state.editingMessageId) return;
+
+            const targetChannel = state.currentDM || state.currentChannel;
+            updateMessage(targetChannel, state.editingMessageId, { content, edited: true });
+            
+            document.getElementById('editModal').classList.add('hidden');
+            state.editingMessageId = null;
+            renderMessages();
+        }
+
+        function deleteMsg(msgId) {
+            if (!confirm('Delete this message?')) return;
+            const targetChannel = state.currentDM || state.currentChannel;
+            deleteMessage(targetChannel, msgId);
+            renderMessages();
+        }
+
+        function showReactionPicker(event, msgId) {
+            event.stopPropagation();
+            state.reactionTargetId = msgId;
+            const picker = document.getElementById('reactionPicker');
+            picker.style.left = event.clientX + 'px';
+            picker.style.top = (event.clientY - 50) + 'px';
+            picker.classList.remove('hidden');
+        }
+
+        function toggleReaction(msgId, emoji) {
+            const targetChannel = state.currentDM || state.currentChannel;
+            const messages = getMessages(targetChannel);
+            const msg = messages.find(m => m.id === msgId);
+            if (!msg) return;
+
+            if (!msg.reactions) msg.reactions = {};
+            if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+
+            const userIdx = msg.reactions[emoji].indexOf(state.currentUser.id);
+            if (userIdx > -1) {
+                msg.reactions[emoji].splice(userIdx, 1);
+                if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+            } else {
+                msg.reactions[emoji].push(state.currentUser.id);
+            }
+
+            updateMessage(targetChannel, msgId, { reactions: msg.reactions });
+            renderMessages();
+        }
+
+        function makeAdmin(userId) {
+            const users = getStorage(STORAGE_KEYS.USERS);
+            if (users[userId]) {
+                users[userId].isAdmin = true;
+                setStorage(STORAGE_KEYS.USERS, users);
+                renderAdminUserList();
+                broadcastEvent('user_update', users);
+            }
+        }
+
+        function banUser(userId) {
+            if (!confirm('Ban this user?')) return;
+            const users = getStorage(STORAGE_KEYS.USERS);
+            delete users[userId];
+            setStorage(STORAGE_KEYS.USERS, users);
+            renderAdminUserList();
+            renderOnlineUsers();
+            broadcastEvent('user_update', users);
+        }
+
+        function sendAnnouncement() {
+            const content = document.getElementById('announcementText').value.trim();
+            if (!content) return;
+
+            const message = {
+                id: generateId(),
+                userId: state.currentUser.id,
+                userName: state.currentUser.name,
+                avatar: state.currentUser.avatar,
+                customAvatar: state.currentUser.customAvatar,
+                isAdmin: true,
+                content: `📢 **ANNOUNCEMENT**\n\n${content}`,
+                timestamp: Date.now(),
+                reactions: {}
+            };
+
+            saveMessage('announcements', message);
+            document.getElementById('announcementText').value = '';
+            alert('Announcement sent!');
+        }
+
+        // ============================================
+        // Initialization
+        // ============================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initUser();
+
+            // Avatar selection
+            document.querySelectorAll('.avatar-option').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.avatar-option').forEach(b => b.classList.remove('ring-2', 'ring-indigo-500'));
+                    btn.classList.add('ring-2', 'ring-indigo-500');
+                    state.selectedAvatar = btn.dataset.avatar;
+                });
+            });
+
+            // Join button
+            document.getElementById('joinBtn').addEventListener('click', () => {
+                const name = document.getElementById('usernameInput').value.trim();
+                if (!name) {
+                    alert('Please enter your name');
+                    return;
+                }
+
+                const isAdmin = name === APP_CONFIG.ADMIN_KEY;
+                state.currentUser = {
+                    id: generateId(),
+                    name: isAdmin ? 'Admin' : name,
+                    avatar: state.selectedAvatar,
+                    isAdmin: isAdmin,
+                    createdAt: Date.now()
+                };
+
+                setStorage(STORAGE_KEYS.USER, state.currentUser);
+                registerUser();
+                showMainApp();
+                updateUserDisplay();
+            });
+
+            // Tab navigation
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active', 'text-white', 'border-b-2', 'border-indigo-500'));
+                    tab.classList.add('active', 'text-white', 'border-b-2', 'border-indigo-500');
+                    
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                    document.getElementById(tab.dataset.tab + 'Tab').classList.remove('hidden');
+                });
+            });
+
+            // Channel switching
+            document.querySelectorAll('.channel-item').forEach(item => {
+                item.addEventListener('click', () => switchChannel(item.dataset.channel));
+            });
+
+            // Message sending
+            document.getElementById('sendBtn')?.addEventListener('click', sendMessage);
+            document.getElementById('messageInput')?.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // Typing indicator
+            document.getElementById('messageInput')?.addEventListener('input', () => {
+                broadcastEvent('typing', { channel: state.currentChannel, user: state.currentUser?.name });
+            });
+
+            // File handling
+            document.getElementById('fileInput')?.addEventListener('change', handleFileSelect);
+            document.getElementById('cancelFile')?.addEventListener('click', () => {
+                state.selectedFile = null;
+                document.getElementById('filePreview').classList.add('hidden');
+            });
+
+            // Emoji picker
+            document.getElementById('emojiBtn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('emojiPicker').classList.toggle('active');
+            });
+
+            document.querySelectorAll('.emoji-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const input = document.getElementById('messageInput');
+                    input.value += btn.textContent;
+                    input.focus();
+                    document.getElementById('emojiPicker').classList.remove('active');
+                });
+            });
+
+            // Reaction picker
+            document.querySelectorAll('.reaction-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (state.reactionTargetId) {
+                        toggleReaction(state.reactionTargetId, btn.textContent);
+                    }
+                    document.getElementById('reactionPicker').classList.add('hidden');
+                });
+            });
+
+            // Close pickers on outside click
+            document.addEventListener('click', () => {
+                document.getElementById('emojiPicker').classList.remove('active');
+                document.getElementById('reactionPicker').classList.add('hidden');
+            });
+
+            // Settings modal
+            document.getElementById('settingsBtn')?.addEventListener('click', () => {
+                document.getElementById('settingsName').value = state.currentUser?.name || '';
+                document.getElementById('settingsModal').classList.remove('hidden');
+                document.getElementById('settingsModal').classList.add('flex');
+            });
+
+            document.getElementById('closeSettings')?.addEventListener('click', () => {
+                document.getElementById('settingsModal').classList.add('hidden');
+            });
+
+            document.getElementById('saveSettings')?.addEventListener('click', () => {
+                const newName = document.getElementById('settingsName').value.trim();
+                if (newName) {
+                    state.currentUser.name = newName;
+                    state.currentUser.avatar = state.selectedAvatar;
+                    setStorage(STORAGE_KEYS.USER, state.currentUser);
+                    registerUser();
+                    updateUserDisplay();
+                }
+                document.getElementById('settingsModal').classList.add('hidden');
+            });
+
+            document.getElementById('customAvatarInput')?.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    state.currentUser.customAvatar = reader.result;
+                    setStorage(STORAGE_KEYS.USER, state.currentUser);
+                    registerUser();
+                    updateUserDisplay();
+                };
+                reader.readAsDataURL(file);
+            });
+
+            document.getElementById('logoutBtn')?.addEventListener('click', () => {
+                updateUserStatus(false);
+                localStorage.removeItem(STORAGE_KEYS.USER);
+                location.reload();
+            });
+
+            // Admin panel
+            document.getElementById('adminPanelBtn')?.addEventListener('click', () => {
+                renderAdminUserList();
+                document.getElementById('adminModal').classList.remove('hidden');
+                document.getElementById('adminModal').classList.add('flex');
+            });
+
+            document.getElementById('closeAdmin')?.addEventListener('click', () => {
+                document.getElementById('adminModal').classList.add('hidden');
+            });
+
+            document.getElementById('sendAnnouncement')?.addEventListener('click', sendAnnouncement);
+
+            document.getElementById('clearChannel')?.addEventListener('click', () => {
+                if (confirm(`Clear all messages in #${state.currentChannel}?`)) {
+                    clearChannelMessages(state.currentChannel);
+                }
+            });
+
+            // Edit modal
+            document.getElementById('closeEdit')?.addEventListener('click', () => {
+                document.getElementById('editModal').classList.add('hidden');
+            });
+            document.getElementById('cancelEdit')?.addEventListener('click', () => {
+                document.getElementById('editModal').classList.add('hidden');
+            });
+            document.getElementById('saveEdit')?.addEventListener('click', saveEditedMessage);
+
+            // DM search
+            document.getElementById('dmSearch')?.addEventListener('input', renderDMsList);
+
+            // Presence management
+            window.addEventListener('beforeunload', () => updateUserStatus(false));
+            window.addEventListener('focus', () => updateUserStatus(true));
+            window.addEventListener('blur', () => {
+                // Still online but not active
+            });
+
+            // Periodic presence update
+            setInterval(() => {
+                if (state.currentUser) {
+                    updateUserStatus(true);
+                    renderOnlineUsers();
+                }
+            }, 30000);
+        });
+    </script>
+</body>
+</html>
