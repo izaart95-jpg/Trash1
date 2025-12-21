@@ -22,13 +22,8 @@ jobs:
           cd $env:WORK_DIR
           curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
           Expand-Archive chat.zip -Force
-
-          # Find first directory (the chat folder)
-          $chatDir = Get-ChildItem -Directory | Select-Object -First 1
-          if (-not $chatDir) { exit 1 }
-
-          echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
-          echo "CHAT_NAME=$($chatDir.Name)" >> $env:GITHUB_ENV
+          echo "CHAT_DIR=$env:WORK_DIR\chat\chat-main" >> $env:GITHUB_ENV
+          echo "CHAT_NAME=chat-main" >> $env:GITHUB_ENV
 
       - name: Download ngrok.exe
         shell: powershell
@@ -36,35 +31,22 @@ jobs:
           cd $env:WORK_DIR
           curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
           Expand-Archive ngrok.zip -Force
-
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
-          if (-not $ngrok) { Write-Error "ngrok.exe not found!"; exit 1 }
-
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
-      - name: Run Node server.js and ngrok safely
+      - name: Run Node server and ngrok in background
         shell: powershell
         run: |
-          cd $env:CHAT_DIR
-
-          # Find server.js dynamically
-          $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
-          if (-not $serverFile) {
-              Write-Error "server.js not found in $env:CHAT_DIR"
-              exit 1
-          }
-          Write-Host "Found server.js at $($serverFile.FullName)"
-
           # Start Node server in background
-          node C:\Users\runneradmin\Downloads\chat-work\chat\chat-main\server.js
+          Start-Process node -ArgumentList "$env:CHAT_DIR\server.js" -NoNewWindow
           echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
           # Give server a few seconds to start
           Start-Sleep -Seconds 5
 
           # Start ngrok in background
-          Start-Job -Name ngrokTunnel -ScriptBlock { cmd.exe /c "$env:NGROK_EXE http 9001" }
+          Start-Job -Name ngrokTunnel -ScriptBlock { & "$env:NGROK_EXE" http 9001 }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
       - name: Wait 5h 52m
@@ -82,7 +64,7 @@ jobs:
       - name: Stop Node & ngrok
         shell: powershell
         run: |
-          Get-Job | Stop-Job -Force
+          Get-Job -Name ngrokTunnel | Stop-Job -Force
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
 
