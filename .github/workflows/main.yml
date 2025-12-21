@@ -38,35 +38,48 @@ jobs:
 
           # Dynamically find ngrok.exe
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
-          if (-not $ngrok) {
-            Write-Error "ngrok.exe not found after extraction!"
-            exit 1
-          }
+          if (-not $ngrok) { Write-Error "ngrok.exe not found!"; exit 1 }
 
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
-      - name: Run node server.js and ngrok (PowerShell-safe)
+      - name: Run node server.js and ngrok safely
         shell: powershell
         run: |
-          # Start node server.js in background from chat folder
           cd $env:CHAT_DIR
+
+          # Start node server.js in background
           Write-Host "Starting node server.js..."
-          Start-Job -Name nodeServer -ScriptBlock {
-            cmd.exe /c "node server.js"
-          }
+          Start-Job -Name nodeServer -ScriptBlock { cmd.exe /c "node server.js" }
           echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
-          Start-Sleep -Seconds 5
+          # Wait for server to respond before starting ngrok
+          $maxWait = 60  # max wait 60s
+          $waited = 0
+          $port = 9001
+          $serverReady = $false
 
-          Write-Host "Configuring ngrok..."
-          & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
-          Start-Sleep -Seconds 5
-
-          Write-Host "Starting ngrok http 9001..."
-          Start-Job -Name ngrokTunnel -ScriptBlock {
-            cmd.exe /c "$env:NGROK_EXE http 9001"
+          while (-not $serverReady -and $waited -lt $maxWait) {
+              try {
+                  $resp = Invoke-WebRequest -Uri "http://localhost:$port" -UseBasicParsing -TimeoutSec 2
+                  if ($resp.StatusCode -eq 200 -or $resp.StatusCode -eq 404) {
+                      $serverReady = $true
+                      break
+                  }
+              } catch {}
+              Start-Sleep -Seconds 2
+              $waited += 2
           }
+
+          if (-not $serverReady) {
+              Write-Error "Node server did not start within $maxWait seconds!"
+              exit 1
+          }
+          Write-Host "Node server is ready on port $port"
+
+          # Start ngrok once server is ready
+          Write-Host "Starting ngrok http $port..."
+          Start-Job -Name ngrokTunnel -ScriptBlock { cmd.exe /c "$env:NGROK_EXE http $port" }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
       - name: Wait 5h 52m
