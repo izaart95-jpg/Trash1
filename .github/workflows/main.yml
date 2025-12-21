@@ -1,0 +1,124 @@
+name: Chat Automation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  chat-runner:
+    runs-on: windows-latest
+    timeout-minutes: 400
+
+    steps:
+      - name: Setup working directories
+        shell: powershell
+        run: |
+          $base = "$env:GITHUB_WORKSPACE\chat-work"
+          $zipDir = "$base\zip"
+          New-Item -ItemType Directory -Path $base -Force
+          New-Item -ItemType Directory -Path $zipDir -Force
+          echo "BASE_DIR=$base" >> $env:GITHUB_ENV
+          echo "ZIP_DIR=$zipDir" >> $env:GITHUB_ENV
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download and extract chat.zip
+        shell: powershell
+        run: |
+          $zipPath = "$env:BASE_DIR\chat.zip"
+          Invoke-WebRequest `
+            -Uri "https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip" `
+            -OutFile $zipPath
+
+          Expand-Archive -Path $zipPath -DestinationPath $env:BASE_DIR -Force
+
+          $chatDir = Get-ChildItem $env:BASE_DIR -Directory | Where-Object { $_.Name -eq "chat-main" }
+          echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
+
+      - name: Download ngrok (standalone exe)
+        shell: powershell
+        run: |
+          $ngrokZip = "$env:BASE_DIR\ngrok.zip"
+          Invoke-WebRequest `
+            -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" `
+            -OutFile $ngrokZip
+
+          Expand-Archive -Path $ngrokZip -DestinationPath $env:BASE_DIR -Force
+
+          $ngrokExe = Get-ChildItem $env:BASE_DIR -Recurse -Filter "ngrok.exe" | Select-Object -First 1
+          echo "NGROK_EXE=$($ngrokExe.FullName)" >> $env:GITHUB_ENV
+
+      - name: Install npm dependencies
+        shell: powershell
+        run: |
+          Set-Location $env:CHAT_DIR
+          npm install
+
+      - name: Start npm, ngrok, timer, cleanup, upload
+        shell: powershell
+        run: |
+          Set-Location $env:CHAT_DIR
+
+          Write-Host "=== STARTING npm start ==="
+          $npmProc = Start-Process `
+            -FilePath "npm" `
+            -ArgumentList "start" `
+            -PassThru `
+            -WindowStyle Hidden
+
+          $startTime = Get-Date
+
+          Start-Sleep -Seconds 5
+
+          Write-Host "=== CONFIGURING NGROK ==="
+          & $env:NGROK_EXE config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+
+          Start-Sleep -Seconds 5
+
+          Write-Host "=== STARTING NGROK HTTP 9001 ==="
+          $ngrokProc = Start-Process `
+            -FilePath $env:NGROK_EXE `
+            -ArgumentList "http 9001" `
+            -PassThru `
+            -WindowStyle Hidden
+
+          Write-Host "=== TIMER STARTED (5h 52m) ==="
+
+          while ((New-TimeSpan -Start $startTime -End (Get-Date)).TotalMinutes -lt 352) {
+              Start-Sleep -Seconds 300
+              Write-Host "[$(Get-Date)] Still running..."
+          }
+
+          Write-Host "=== 5h 52m REACHED ==="
+
+          Invoke-WebRequest `
+            -Uri "https://abstrusely-procompensation-phuong.ngrok-free.dev/delete" `
+            -Method POST
+
+          Write-Host "=== STOPPING npm ==="
+          Stop-Process -Id $npmProc.Id -Force
+
+          Write-Host "=== STOPPING ngrok ==="
+          Stop-Process -Id $ngrokProc.Id -Force
+
+          Write-Host "=== ZIPPING chat-main ==="
+          $finalZip = "$env:ZIP_DIR\chat.zip"
+          Compress-Archive `
+            -Path "$env:CHAT_DIR\*" `
+            -DestinationPath $finalZip `
+            -Force
+
+          Write-Host "=== UPLOADING chat.zip ==="
+          Invoke-WebRequest `
+            -Uri "https://abstrusely-procompensation-phuong.ngrok-free.dev/upload" `
+            -Method POST `
+            -Form @{ file = Get-Item $finalZip }
+
+      - name: Upload zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-final
+          path: ${{ env.ZIP_DIR }}
+          retention-days: 7
