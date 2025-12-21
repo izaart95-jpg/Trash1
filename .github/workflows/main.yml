@@ -51,9 +51,9 @@ jobs:
           # Export NGROK_EXE for CMD/batch file
           setx NGROK_EXE "$env:NGROK_EXE"
 
-          # Create ngrok batch file safely
-          $batchFile = "$env:WORK_DIR\run_ngrok.bat"
-          @'
+          # Create ngrok batch file safely (here-string must start at beginning of line)
+$batchFile = "$env:WORK_DIR\run_ngrok.bat"
+@'
 %NGROK_EXE% config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
 %NGROK_EXE% http 9001
 '@ | Out-File -FilePath $batchFile -Encoding ASCII
