@@ -29,13 +29,22 @@ jobs:
           echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
           echo "CHAT_NAME=$($chatDir.Name)" >> $env:GITHUB_ENV
 
-      - name: Download ngrok
+      - name: Download and detect ngrok.exe
         shell: powershell
         run: |
           cd $env:WORK_DIR
           curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
           Expand-Archive ngrok.zip -Force
-          echo "NGROK_PATH=$env:WORK_DIR\ngrok.exe" >> $env:GITHUB_ENV
+
+          # Dynamically find ngrok.exe
+          $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
+          if (-not $ngrok) {
+            Write-Error "ngrok.exe not found after extraction!"
+            exit 1
+          }
+
+          echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
+          Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
       - name: Run node server.js and ngrok (PowerShell-safe)
         shell: powershell
@@ -50,14 +59,13 @@ jobs:
 
           Start-Sleep -Seconds 5
 
-          # Configure and start ngrok from WORK_DIR (full path)
           Write-Host "Configuring ngrok..."
-          & "$env:WORK_DIR\ngrok.exe" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+          & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
           Start-Sleep -Seconds 5
 
           Write-Host "Starting ngrok http 9001..."
           Start-Job -Name ngrokTunnel -ScriptBlock {
-            cmd.exe /c "$env:WORK_DIR\ngrok.exe http 9001"
+            cmd.exe /c "$env:NGROK_EXE http 9001"
           }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
