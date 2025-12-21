@@ -23,40 +23,47 @@ jobs:
           curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
           Expand-Archive chat.zip -Force
 
+          # Find first directory (the chat folder)
           $chatDir = Get-ChildItem -Directory | Select-Object -First 1
           if (-not $chatDir) { exit 1 }
 
           echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
           echo "CHAT_NAME=$($chatDir.Name)" >> $env:GITHUB_ENV
 
-      - name: Download and detect ngrok.exe
+      - name: Download ngrok.exe
         shell: powershell
         run: |
           cd $env:WORK_DIR
           curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
           Expand-Archive ngrok.zip -Force
 
-          # Dynamically find ngrok.exe
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
           if (-not $ngrok) { Write-Error "ngrok.exe not found!"; exit 1 }
 
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
-      - name: Run node server.js and ngrok safely
+      - name: Run Node server.js and ngrok safely
         shell: powershell
         run: |
           cd $env:CHAT_DIR
 
-          # Start node server.js in background
-          Write-Host "Starting node server.js..."
-          node server.js
+          # Find server.js dynamically
+          $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
+          if (-not $serverFile) {
+              Write-Error "server.js not found in $env:CHAT_DIR"
+              exit 1
+          }
+          Write-Host "Found server.js at $($serverFile.FullName)"
+
+          # Start Node server in background
+          Start-Job -Name nodeServer -ScriptBlock { node $using:serverFile.FullName }
           echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
-          
+          # Give server a few seconds to start
+          Start-Sleep -Seconds 5
 
-          # Start ngrok once server is ready
-          Write-Host "Starting ngrok http..."
+          # Start ngrok in background
           Start-Job -Name ngrokTunnel -ScriptBlock { cmd.exe /c "$env:NGROK_EXE http 9001" }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
@@ -72,7 +79,7 @@ jobs:
         run: |
           curl.exe -X POST https://abstrusely-procompensation-phuong.ngrok-free.dev/delete
 
-      - name: Stop node & ngrok
+      - name: Stop Node & ngrok
         shell: powershell
         run: |
           Get-Job | Stop-Job -Force
