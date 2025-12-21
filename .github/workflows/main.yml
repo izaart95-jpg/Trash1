@@ -20,7 +20,6 @@ jobs:
         shell: powershell
         run: |
           cd $env:WORK_DIR
-
           curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
           Expand-Archive chat.zip -Force
 
@@ -34,42 +33,50 @@ jobs:
         shell: powershell
         run: |
           cd $env:WORK_DIR
-
           curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
           Expand-Archive ngrok.zip -Force
           echo "NGROK_DIR=$env:WORK_DIR" >> $env:GITHUB_ENV
 
-      - name: Run npm and ngrok (direct)
+      - name: Run node server.js and ngrok (PowerShell-safe)
         shell: powershell
         run: |
           cd $env:CHAT_DIR
 
-          Write-Host "Starting npm start..."
-          npm start &
-          echo "NPM_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
+          Write-Host "Starting node server.js..."
+          Start-Job -Name nodeServer -ScriptBlock {
+            cmd.exe /c "node server.js"
+          }
+          echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
           Start-Sleep -Seconds 5
 
           cd $env:WORK_DIR
+          Write-Host "Configuring ngrok..."
           .\ngrok.exe config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
           Start-Sleep -Seconds 5
 
-          .\ngrok.exe http 9001 &
+          Write-Host "Starting ngrok http 9001..."
+          Start-Job -Name ngrokTunnel -ScriptBlock {
+            cmd.exe /c ".\ngrok.exe http 9001"
+          }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
       - name: Wait 5h 52m
         shell: powershell
         run: |
-          Start-Sleep -Seconds ((5 * 3600) + (52 * 60))
+          $waitSeconds = (5 * 3600) + (52 * 60)
+          Write-Host "Waiting $waitSeconds seconds..."
+          Start-Sleep -Seconds $waitSeconds
 
       - name: POST delete
         shell: powershell
         run: |
           curl.exe -X POST https://abstrusely-procompensation-phuong.ngrok-free.dev/delete
 
-      - name: Stop npm & ngrok
+      - name: Stop node & ngrok
         shell: powershell
         run: |
+          Get-Job | Stop-Job -Force
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
 
