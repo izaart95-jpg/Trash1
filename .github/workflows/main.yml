@@ -22,7 +22,6 @@ jobs:
           cd $env:WORK_DIR
           curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
           Expand-Archive chat.zip -Force
-          echo "CHAT_NAME=chat-main" >> $env:GITHUB_ENV
 
       - name: Download ngrok.exe
         shell: powershell
@@ -34,63 +33,40 @@ jobs:
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
-      - name: Run Node server and ngrok via batch file
+      - name: Run Node server + ngrok (CORRECT WAY)
         shell: powershell
         run: |
           cd $env:WORK_DIR
 
-          # Find server.js dynamically
+          # Find server.js
           $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
-          if (-not $serverFile) { Write-Error "server.js not found!"; exit 1 }
+          if (-not $serverFile) { Write-Error "server.js not found"; exit 1 }
           Write-Host "Found server.js at $($serverFile.FullName)"
 
-          # Start Node server in background
-          Start-Process node -ArgumentList "$($serverFile.FullName)" -NoNewWindow
-          Write-Host "Node server started"
+          # Start Node server (background)
+          Start-Job -Name nodeServer -ScriptBlock {
+            node "$using:($serverFile.FullName)"
+          }
+          Write-Host "Node server job started"
 
-          # Export NGROK_EXE for batch file
-          setx NGROK_EXE "$env:NGROK_EXE"
+          # Configure ngrok auth
+          & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
 
-          # Create ngrok batch file using array of lines (safe in YAML)
-          $batchFile = "$env:WORK_DIR\run_ngrok.bat"
-          $lines = @(
-            '%NGROK_EXE% config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh'
-            '%NGROK_EXE% http 9001'
-          )
-          $lines | Set-Content -Path $batchFile -Encoding ASCII
+          # Start ngrok tunnel (THIS IS THE IMPORTANT PART)
+          Start-Job -Name ngrokTunnel -ScriptBlock {
+            & "$env:NGROK_EXE" http 9001
+          }
 
-          # Run ngrok batch file
-          Start-Process -FilePath $batchFile -NoNewWindow
-          Write-Host "ngrok batch file started"
+          Write-Host "ngrok tunnel job started"
 
       - name: Wait 5h 52m
         shell: powershell
         run: |
-          $waitSeconds = (5 * 3600) + (52 * 60)
-          Write-Host "Waiting $waitSeconds seconds..."
-          Start-Sleep -Seconds $waitSeconds
-
-      - name: POST delete
-        shell: powershell
-        run: |
-          curl.exe -X POST https://abstrusely-procompensation-phuong.ngrok-free.dev/delete
+          Start-Sleep -Seconds 21120
 
       - name: Stop Node & ngrok
         shell: powershell
         run: |
+          Get-Job | Stop-Job -Force
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
-
-      - name: Zip chat folder
-        shell: powershell
-        run: |
-          cd $env:WORK_DIR
-          if (Test-Path chat.zip) { Remove-Item chat.zip -Force }
-          Compress-Archive -Path $env:CHAT_NAME -DestinationPath chat.zip
-
-      - name: Upload zip
-        shell: powershell
-        run: |
-          cd $env:WORK_DIR
-          curl.exe -X POST https://abstrusely-procompensation-phuong.ngrok-free.dev/upload `
-            -F "file=@chat.zip"
