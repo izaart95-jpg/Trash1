@@ -46,10 +46,18 @@ jobs:
         run: |
           cd "$env:WORK_DIR\chat-main"
           
-          # Start npm start in background
-          $nodeJob = Start-Process npm -ArgumentList "start" -PassThru -NoNewWindow
-          Write-Host "Node server started via npm start (PID: $($nodeJob.Id))"
+          # Start node directly in background using Start-Job
+          $job = Start-Job -ScriptBlock {
+            param($dir)
+            cd $dir
+            node server.js
+          } -ArgumentList "$env:WORK_DIR\chat-main"
+          
+          Write-Host "Node server started as background job"
           Start-Sleep -Seconds 5
+          
+          # Verify job is running
+          Get-Job | Format-Table
           
           # Start ngrok in foreground (this will keep running)
           Write-Host "Starting ngrok tunnel..."
