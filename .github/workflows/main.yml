@@ -45,22 +45,29 @@ jobs:
 
           # Find server.js dynamically
           $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
-          if (-not $serverFile) {
-              Write-Error "server.js not found!"
-              exit 1
-          }
+          if (-not $serverFile) { Write-Error "server.js not found!"; exit 1 }
           Write-Host "Found server.js at $($serverFile.FullName)"
 
           # Start Node server in background
-          Start-Process node -ArgumentList "$($serverFile.FullName)" -NoNewWindow
-          Write-Host "Node server started"
+          $nodeProcess = Start-Process node -ArgumentList "$($serverFile.FullName)" -PassThru
+          Write-Host "Node server started (PID: $($nodeProcess.Id))"
 
           # Give server a few seconds to start
           Start-Sleep -Seconds 5
 
-          # Start ngrok in background
-          Start-Process -FilePath $env:NGROK_EXE -ArgumentList "http 9001" -NoNewWindow
-          Write-Host "ngrok started"
+          # Start ngrok as a job and pass full path explicitly
+          $ngrokExe = "$env:NGROK_EXE"
+          $ngrokJob = Start-Job -Name ngrokTunnel -ScriptBlock { param($path) & $path http 9001 } -ArgumentList $ngrokExe
+          Write-Host "ngrok started as background job"
+
+          # Wait a few seconds for ngrok to register tunnel
+          Start-Sleep -Seconds 5
+
+          # Fetch the public URL from ngrok API
+          $ngrokApi = Invoke-RestMethod http://127.0.0.1:4040/api/tunnels
+          $publicUrl = $ngrokApi.tunnels[0].public_url
+          Write-Host "ngrok public URL: $publicUrl"
+          echo "NGROK_PUBLIC_URL=$publicUrl" >> $env:GITHUB_ENV
 
       - name: Wait 5h 52m
         shell: powershell
@@ -77,6 +84,7 @@ jobs:
       - name: Stop Node & ngrok
         shell: powershell
         run: |
+          Get-Job -Name ngrokTunnel | Stop-Job -Force
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
 
