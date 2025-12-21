@@ -48,15 +48,16 @@ jobs:
           Start-Process node -ArgumentList "$($serverFile.FullName)" -NoNewWindow
           Write-Host "Node server started"
 
-          # Export NGROK_EXE for CMD/batch file
+          # Export NGROK_EXE for batch file
           setx NGROK_EXE "$env:NGROK_EXE"
 
-          # Create ngrok batch file safely (here-string must start at beginning of line)
-$batchFile = "$env:WORK_DIR\run_ngrok.bat"
-@'
-%NGROK_EXE% config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
-%NGROK_EXE% http 9001
-'@ | Out-File -FilePath $batchFile -Encoding ASCII
+          # Create ngrok batch file using array of lines (safe in YAML)
+          $batchFile = "$env:WORK_DIR\run_ngrok.bat"
+          $lines = @(
+            '%NGROK_EXE% config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh'
+            '%NGROK_EXE% http 9001'
+          )
+          $lines | Set-Content -Path $batchFile -Encoding ASCII
 
           # Run ngrok batch file
           Start-Process -FilePath $batchFile -NoNewWindow
