@@ -22,7 +22,6 @@ jobs:
           cd $env:WORK_DIR
           curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
           Expand-Archive chat.zip -Force
-          echo "CHAT_DIR=$env:WORK_DIR\chat\chat-main" >> $env:GITHUB_ENV
           echo "CHAT_NAME=chat-main" >> $env:GITHUB_ENV
 
       - name: Download ngrok.exe and configure auth token
@@ -42,9 +41,10 @@ jobs:
       - name: Run Node server and ngrok in background
         shell: powershell
         run: |
-          # Start Node server in background
-          Start-Process node -ArgumentList "$env:CHAT_DIR\server.js" -NoNewWindow
+          # Start Node server in background (hardcoded path)
+          Start-Process node -ArgumentList "C:\Users\runneradmin\Downloads\chat-work\chat\chat-main\server.js" -NoNewWindow
           echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
+          Write-Host "Node server started"
 
           # Give server a few seconds to start
           Start-Sleep -Seconds 5
