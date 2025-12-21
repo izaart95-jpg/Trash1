@@ -1,13 +1,10 @@
 name: CHAT
-
 on:
   workflow_dispatch:
-
 jobs:
   chat-ngrok-runner:
     runs-on: windows-latest
     timeout-minutes: 400
-
     steps:
       - name: Prepare Downloads directory
         shell: powershell
@@ -15,14 +12,12 @@ jobs:
           $dl = "$env:USERPROFILE\Downloads\chat-work"
           New-Item -ItemType Directory -Force -Path $dl
           echo "WORK_DIR=$dl" >> $env:GITHUB_ENV
-
       - name: Download and extract chat.zip
         shell: powershell
         run: |
           cd $env:WORK_DIR
           curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
           Expand-Archive chat.zip -Force
-
       - name: Download ngrok.exe
         shell: powershell
         run: |
@@ -32,38 +27,34 @@ jobs:
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
-
       - name: Run Node server + ngrok (CORRECT WAY)
         shell: powershell
         run: |
           cd $env:WORK_DIR
-
           # Find server.js
           $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
           if (-not $serverFile) { Write-Error "server.js not found"; exit 1 }
           Write-Host "Found server.js at $($serverFile.FullName)"
-
+          
+          # Store the full path in a simple variable for the ScriptBlock
+          $serverPath = $serverFile.FullName
+          
           # Start Node server (background)
           Start-Job -Name nodeServer -ScriptBlock {
-            node "$using:($serverFile.FullName)"
+            node $using:serverPath
           }
           Write-Host "Node server job started"
-
           # Configure ngrok auth
           & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
-
-          # Start ngrok tunnel (THIS IS THE IMPORTANT PART)
+          # Start ngrok tunnel
           Start-Job -Name ngrokTunnel -ScriptBlock {
-            & "$env:NGROK_EXE" http 9001
+            & $using:env:NGROK_EXE http 9001
           }
-
           Write-Host "ngrok tunnel job started"
-
       - name: Wait 5h 52m
         shell: powershell
         run: |
           Start-Sleep -Seconds 21120
-
       - name: Stop Node & ngrok
         shell: powershell
         run: |
