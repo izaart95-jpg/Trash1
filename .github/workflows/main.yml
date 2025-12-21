@@ -25,7 +25,7 @@ jobs:
           echo "CHAT_DIR=$env:WORK_DIR\chat\chat-main" >> $env:GITHUB_ENV
           echo "CHAT_NAME=chat-main" >> $env:GITHUB_ENV
 
-      - name: Download ngrok.exe
+      - name: Download ngrok.exe and configure auth token
         shell: powershell
         run: |
           cd $env:WORK_DIR
@@ -34,6 +34,10 @@ jobs:
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
+
+          # Configure ngrok auth token
+          & "$($ngrok.FullName)" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+          Write-Host "ngrok auth token configured"
 
       - name: Run Node server and ngrok in background
         shell: powershell
