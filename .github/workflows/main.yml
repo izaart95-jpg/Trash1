@@ -17,31 +17,31 @@ jobs:
           echo "WORK_DIR=$work" >> $env:GITHUB_ENV
 
       - name: Download and extract chat.zip (auto-detect folder)
-  shell: powershell
-  run: |
-    cd $env:WORK_DIR
+        shell: powershell
+        run: |
+          cd $env:WORK_DIR
 
-    curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
-    Expand-Archive chat.zip -Force
+          curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
+          Expand-Archive chat.zip -Force
 
-    # Find first directory inside extraction
-    $chatDir = Get-ChildItem -Directory | Select-Object -First 1
+          $chatDir = Get-ChildItem -Directory | Select-Object -First 1
+          if (-not $chatDir) {
+            Write-Error "No directory found after extracting chat.zip"
+            exit 1
+          }
 
-    if (-not $chatDir) {
-      Write-Error "No directory found after extracting chat.zip"
-      exit 1
-    }
-
-    Write-Host "Detected chat directory: $($chatDir.FullName)"
-    echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
-
+          Write-Host "Detected chat directory: $($chatDir.FullName)"
+          echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
+          echo "CHAT_NAME=$($chatDir.Name)" >> $env:GITHUB_ENV
 
       - name: Download ngrok
         shell: powershell
         run: |
           cd $env:WORK_DIR
+
           curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
           Expand-Archive ngrok.zip -Force
+
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
 
@@ -54,22 +54,16 @@ jobs:
           $npm = Start-Process -FilePath "npm" -ArgumentList "start" -PassThru -WindowStyle Hidden
           echo "NPM_PID=$($npm.Id)" >> $env:GITHUB_ENV
 
-          $startTime = Get-Date
-          echo "START_TIME=$startTime" >> $env:GITHUB_ENV
-
           Start-Sleep -Seconds 5
 
           & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
           Start-Sleep -Seconds 5
-
           Start-Process -FilePath "$env:NGROK_EXE" -ArgumentList "http 9001" -WindowStyle Hidden
 
       - name: Wait 5h 52m
         shell: powershell
         run: |
-          $waitSeconds = (5 * 3600) + (52 * 60)
-          Write-Host "Waiting $waitSeconds seconds..."
-          Start-Sleep -Seconds $waitSeconds
+          Start-Sleep -Seconds ((5 * 3600) + (52 * 60))
 
       - name: POST delete
         shell: powershell
@@ -88,7 +82,7 @@ jobs:
         run: |
           cd $env:WORK_DIR
           if (Test-Path chat.zip) { Remove-Item chat.zip -Force }
-          Compress-Archive -Path chat-main -DestinationPath chat.zip
+          Compress-Archive -Path $env:CHAT_NAME -DestinationPath chat.zip
 
       - name: Upload zip
         shell: powershell
