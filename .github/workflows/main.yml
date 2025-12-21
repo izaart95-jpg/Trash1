@@ -41,17 +41,25 @@ jobs:
       - name: Run Node server and ngrok in background
         shell: powershell
         run: |
-          # Start Node server in background (hardcoded path)
-          Start-Process node -ArgumentList "C:\Users\runneradmin\Downloads\chat-work\chat\chat-main\server.js" -NoNewWindow
-          echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
+          cd $env:WORK_DIR
+
+          # Find server.js dynamically
+          $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
+          if (-not $serverFile) {
+              Write-Error "server.js not found!"
+              exit 1
+          }
+          Write-Host "Found server.js at $($serverFile.FullName)"
+
+          # Start Node server in background
+          Start-Process node -ArgumentList "$($serverFile.FullName)" -NoNewWindow
           Write-Host "Node server started"
 
           # Give server a few seconds to start
           Start-Sleep -Seconds 5
 
-          # Start ngrok in background using Start-Process
+          # Start ngrok in background
           Start-Process -FilePath $env:NGROK_EXE -ArgumentList "http 9001" -NoNewWindow
-          echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
           Write-Host "ngrok started"
 
       - name: Wait 5h 52m
