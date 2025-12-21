@@ -12,12 +12,20 @@ jobs:
           $dl = "$env:USERPROFILE\Downloads\chat-work"
           New-Item -ItemType Directory -Force -Path $dl
           echo "WORK_DIR=$dl" >> $env:GITHUB_ENV
+
       - name: Download and extract chat.tar
         shell: powershell
         run: |
           cd $env:WORK_DIR
           curl.exe -L -o chat.tar https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.tar
           tar -xf chat.tar
+
+      - name: Install npm dependencies
+        shell: powershell
+        run: |
+          cd "$env:WORK_DIR\chat-main"
+          npm install
+
       - name: Download ngrok.exe
         shell: powershell
         run: |
@@ -27,26 +35,26 @@ jobs:
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
+
       - name: Configure ngrok auth
         shell: powershell
         run: |
           & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+
       - name: Run Node server and ngrok
         shell: powershell
         run: |
-          cd $env:WORK_DIR
-          $serverFile = Get-ChildItem -Recurse -Filter server.js | Select-Object -First 1
-          if (-not $serverFile) { Write-Error "server.js not found"; exit 1 }
-          Write-Host "Found server.js at $($serverFile.FullName)"
+          cd "$env:WORK_DIR\chat-main"
           
-          # Start Node server in background with visible output
-          $nodeJob = Start-Process node -ArgumentList "`"$($serverFile.FullName)`"" -PassThru -NoNewWindow
-          Write-Host "Node server started (PID: $($nodeJob.Id))"
-          Start-Sleep -Seconds 3
+          # Start npm start in background
+          $nodeJob = Start-Process npm -ArgumentList "start" -PassThru -NoNewWindow
+          Write-Host "Node server started via npm start (PID: $($nodeJob.Id))"
+          Start-Sleep -Seconds 5
           
           # Start ngrok in foreground (this will keep running)
           Write-Host "Starting ngrok tunnel..."
           & "$env:NGROK_EXE" http 9001 --log=stdout
+
       - name: Stop Node & ngrok
         if: always()
         shell: powershell
