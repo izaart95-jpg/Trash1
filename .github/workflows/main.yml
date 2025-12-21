@@ -50,7 +50,7 @@ jobs:
           Start-Sleep -Seconds 5
 
           # Start ngrok in background using Start-Process
-          C:\Users\runneradmin\Downloads\chat-work\ngrok\ngrok.exe http 9001
+          Start-Process -FilePath $env:NGROK_EXE -ArgumentList "http 9001" -NoNewWindow
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
           Write-Host "ngrok started"
 
