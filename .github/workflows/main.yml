@@ -24,7 +24,7 @@ jobs:
           Expand-Archive chat.zip -Force
           echo "CHAT_NAME=chat-main" >> $env:GITHUB_ENV
 
-      - name: Download ngrok.exe and configure auth token
+      - name: Download ngrok.exe
         shell: powershell
         run: |
           cd $env:WORK_DIR
@@ -34,11 +34,7 @@ jobs:
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
           Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
-          # Configure ngrok auth token
-          & "$($ngrok.FullName)" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
-          Write-Host "ngrok auth token configured"
-
-      - name: Run Node server and ngrok in background
+      - name: Run Node server and ngrok via batch file
         shell: powershell
         run: |
           cd $env:WORK_DIR
@@ -49,25 +45,19 @@ jobs:
           Write-Host "Found server.js at $($serverFile.FullName)"
 
           # Start Node server in background
-          $nodeProcess = Start-Process node -ArgumentList "$($serverFile.FullName)" -PassThru
-          Write-Host "Node server started (PID: $($nodeProcess.Id))"
+          Start-Process node -ArgumentList "$($serverFile.FullName)" -NoNewWindow
+          Write-Host "Node server started"
 
-          # Give server a few seconds to start
-          Start-Sleep -Seconds 5
+          # Create ngrok batch file
+          $batchFile = "$env:WORK_DIR\run_ngrok.bat"
+          @"
+$env:NGROK_EXE config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+$env:NGROK_EXE http 9001
+"@ | Out-File -FilePath $batchFile -Encoding ASCII
 
-          # Start ngrok as a job and pass full path explicitly
-          $ngrokExe = "$env:NGROK_EXE"
-          $ngrokJob = Start-Job -Name ngrokTunnel -ScriptBlock { param($path) & $path http 9001 } -ArgumentList $ngrokExe
-          Write-Host "ngrok started as background job"
-
-          # Wait a few seconds for ngrok to register tunnel
-          Start-Sleep -Seconds 5
-
-          # Fetch the public URL from ngrok API
-          $ngrokApi = Invoke-RestMethod http://127.0.0.1:4040/api/tunnels
-          $publicUrl = $ngrokApi.tunnels[0].public_url
-          Write-Host "ngrok public URL: $publicUrl"
-          echo "NGROK_PUBLIC_URL=$publicUrl" >> $env:GITHUB_ENV
+          # Run ngrok batch file
+          Start-Process -FilePath $batchFile -NoNewWindow
+          Write-Host "ngrok batch file started"
 
       - name: Wait 5h 52m
         shell: powershell
@@ -84,7 +74,6 @@ jobs:
       - name: Stop Node & ngrok
         shell: powershell
         run: |
-          Get-Job -Name ngrokTunnel | Stop-Job -Force
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
 
