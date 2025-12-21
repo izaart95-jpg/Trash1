@@ -36,21 +36,30 @@ jobs:
           if (-not $serverFile) { Write-Error "server.js not found"; exit 1 }
           Write-Host "Found server.js at $($serverFile.FullName)"
           
-          # Store the full path in a simple variable for the ScriptBlock
+          # Store paths in simple variables for the ScriptBlocks
           $serverPath = $serverFile.FullName
+          $ngrokPath = $env:NGROK_EXE
           
           # Start Node server (background)
           Start-Job -Name nodeServer -ScriptBlock {
             node $using:serverPath
           }
           Write-Host "Node server job started"
+          
           # Configure ngrok auth
           & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
-          # Start ngrok tunnel
+          
+          # Start ngrok tunnel (using the stored path variable)
           Start-Job -Name ngrokTunnel -ScriptBlock {
-            & $using:env:NGROK_EXE http 9001
+            & $using:ngrokPath http 9001
           }
           Write-Host "ngrok tunnel job started"
+          
+          # Give ngrok a moment to start
+          Start-Sleep -Seconds 3
+          
+          # Check if ngrok is running
+          Get-Job
       - name: Wait 5h 52m
         shell: powershell
         run: |
