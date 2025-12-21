@@ -35,13 +35,13 @@ jobs:
           cd $env:WORK_DIR
           curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
           Expand-Archive ngrok.zip -Force
-          echo "NGROK_DIR=$env:WORK_DIR" >> $env:GITHUB_ENV
+          echo "NGROK_PATH=$env:WORK_DIR\ngrok.exe" >> $env:GITHUB_ENV
 
       - name: Run node server.js and ngrok (PowerShell-safe)
         shell: powershell
         run: |
+          # Start node server.js in background from chat folder
           cd $env:CHAT_DIR
-
           Write-Host "Starting node server.js..."
           Start-Job -Name nodeServer -ScriptBlock {
             cmd.exe /c "node server.js"
@@ -50,14 +50,14 @@ jobs:
 
           Start-Sleep -Seconds 5
 
-          cd $env:WORK_DIR
+          # Configure and start ngrok from WORK_DIR (full path)
           Write-Host "Configuring ngrok..."
-          .\ngrok.exe config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+          & "$env:WORK_DIR\ngrok.exe" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
           Start-Sleep -Seconds 5
 
           Write-Host "Starting ngrok http 9001..."
           Start-Job -Name ngrokTunnel -ScriptBlock {
-            cmd.exe /c ".\ngrok.exe http 9001"
+            cmd.exe /c "$env:WORK_DIR\ngrok.exe http 9001"
           }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
