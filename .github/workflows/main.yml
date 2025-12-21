@@ -1,10 +1,10 @@
-name: Chat Automation (PAA-style)
+name: Chat Automation
 
 on:
   workflow_dispatch:
 
 jobs:
-  chat-automation:
+  chat-job:
     runs-on: windows-latest
     timeout-minutes: 400
 
@@ -15,73 +15,75 @@ jobs:
           $base = "$env:GITHUB_WORKSPACE\work"
           $chatZip = "$base\chat.zip"
           $ngrokZip = "$base\ngrok.zip"
-          $ngrokDir = "$base\ngrok"
-          New-Item -ItemType Directory -Force -Path $base, $ngrokDir
+          New-Item -ItemType Directory -Path $base -Force
+          Set-Location $base
           echo "BASE_DIR=$base" >> $env:GITHUB_ENV
           echo "CHAT_ZIP=$chatZip" >> $env:GITHUB_ENV
-          echo "NGROK_DIR=$ngrokDir" >> $env:GITHUB_ENV
+          echo "NGROK_ZIP=$ngrokZip" >> $env:GITHUB_ENV
 
-      - name: Download chat.zip (wget)
+      - name: Download chat.zip
         shell: powershell
         run: |
-          cd $env:BASE_DIR
-          wget https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip -O chat.zip
-          Expand-Archive chat.zip -Force
+          curl -L "https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip" -o "$env:CHAT_ZIP"
+          Expand-Archive "$env:CHAT_ZIP" -DestinationPath "$env:BASE_DIR" -Force
 
-      - name: Download ngrok (wget)
+      - name: Download ngrok
         shell: powershell
         run: |
-          cd $env:BASE_DIR
-          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -O ngrok.zip
-          Expand-Archive ngrok.zip -DestinationPath $env:NGROK_DIR -Force
-          echo "NGROK_EXE=$env:NGROK_DIR\ngrok.exe" >> $env:GITHUB_ENV
+          curl -L "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -o "$env:NGROK_ZIP"
+          Expand-Archive "$env:NGROK_ZIP" -DestinationPath "$env:BASE_DIR\ngrok" -Force
+          echo "NGROK_EXE=$env:BASE_DIR\ngrok\ngrok.exe" >> $env:GITHUB_ENV
 
       - name: Install Node dependencies
         shell: powershell
         run: |
-          cd $env:BASE_DIR\chat-main
+          cd "$env:BASE_DIR\chat-main"
           npm install
 
-      - name: Start npm & ngrok, wait 5h52m, cleanup & upload
+      - name: Start npm, ngrok, timer logic
         shell: powershell
         run: |
-          cd $env:BASE_DIR\chat-main
+          cd "$env:BASE_DIR\chat-main"
 
           Write-Host "Starting npm start..."
           $npm = Start-Process npm -ArgumentList "start" -PassThru
-          $npmStartTime = Get-Date
 
-          Write-Host "Configuring ngrok..."
-          & $env:NGROK_EXE config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
+          $startTime = Get-Date
+          Write-Host "npm start PID: $($npm.Id)"
+          Write-Host "Start time: $startTime"
 
           Start-Sleep -Seconds 5
 
-          Write-Host "Starting ngrok http 9001..."
-          $ngrok = Start-Process $env:NGROK_EXE -ArgumentList "http 9001" -PassThru
+          & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
 
-          # ---- WAIT 5 HOURS 52 MINUTES ----
-          $targetMinutes = (5 * 60) + 52
-          while ((New-TimeSpan -Start $npmStartTime -End (Get-Date)).TotalMinutes -lt $targetMinutes) {
-            Start-Sleep -Seconds 60
+          Start-Sleep -Seconds 5
+
+          $ngrok = Start-Process "$env:NGROK_EXE" -ArgumentList "http 9001" -PassThru
+          Write-Host "ngrok PID: $($ngrok.Id)"
+
+          # 5 hours 52 minutes = 21120 seconds
+          $targetSeconds = 21120
+
+          while ((New-TimeSpan -Start $startTime -End (Get-Date)).TotalSeconds -lt $targetSeconds) {
+              Start-Sleep -Seconds 60
           }
 
-          Write-Host "Time reached: 5h52m → Sending DELETE request"
-          wget --method=POST https://abstrusely-procompensation-phuong.ngrok-free.dev/delete
+          Write-Host "=== 5:52 elapsed, sending delete ==="
+          curl -X POST "https://abstrusely-procompensation-phuong.ngrok-free.dev/delete"
 
           Write-Host "Stopping npm and ngrok..."
           Stop-Process -Id $npm.Id -Force
           Stop-Process -Id $ngrok.Id -Force
 
-          cd $env:BASE_DIR
+      - name: Zip folder again
+        shell: powershell
+        run: |
+          cd "$env:BASE_DIR"
           if (Test-Path chat.zip) { Remove-Item chat.zip -Force }
+          Compress-Archive -Path "chat-main\*" -DestinationPath "chat.zip"
 
-          Write-Host "Re-zipping chat-main..."
-          Compress-Archive chat-main chat.zip
-
-          Write-Host "Uploading chat.zip..."
-          wget --method=POST `
-            --body-file=chat.zip `
-            https://abstrusely-procompensation-phuong.ngrok-free.dev/upload
-
-      - name: Done
-        run: echo "Workflow completed successfully"
+      - name: Upload chat.zip
+        shell: powershell
+        run: |
+          curl -X POST "https://abstrusely-procompensation-phuong.ngrok-free.dev/upload" `
+            -F "file=@chat.zip"
