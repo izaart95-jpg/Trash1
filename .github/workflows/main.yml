@@ -16,13 +16,25 @@ jobs:
           New-Item -ItemType Directory -Force -Path $work
           echo "WORK_DIR=$work" >> $env:GITHUB_ENV
 
-      - name: Download chat.zip
-        shell: powershell
-        run: |
-          cd $env:WORK_DIR
-          curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
-          Expand-Archive chat.zip -Force
-          echo "CHAT_DIR=$env:WORK_DIR\chat-main" >> $env:GITHUB_ENV
+      - name: Download and extract chat.zip (auto-detect folder)
+  shell: powershell
+  run: |
+    cd $env:WORK_DIR
+
+    curl.exe -L -o chat.zip https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.zip
+    Expand-Archive chat.zip -Force
+
+    # Find first directory inside extraction
+    $chatDir = Get-ChildItem -Directory | Select-Object -First 1
+
+    if (-not $chatDir) {
+      Write-Error "No directory found after extracting chat.zip"
+      exit 1
+    }
+
+    Write-Host "Detected chat directory: $($chatDir.FullName)"
+    echo "CHAT_DIR=$($chatDir.FullName)" >> $env:GITHUB_ENV
+
 
       - name: Download ngrok
         shell: powershell
