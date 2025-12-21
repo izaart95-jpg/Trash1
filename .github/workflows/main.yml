@@ -57,7 +57,7 @@ jobs:
           Write-Host "Found server.js at $($serverFile.FullName)"
 
           # Start Node server in background
-          Start-Job -Name nodeServer -ScriptBlock { node $using:serverFile.FullName }
+          node C:\Users\runneradmin\Downloads\chat-work\chat\chat-main\server.js
           echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
           # Give server a few seconds to start
