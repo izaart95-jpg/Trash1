@@ -50,36 +50,14 @@ jobs:
 
           # Start node server.js in background
           Write-Host "Starting node server.js..."
-          Start-Job -Name nodeServer -ScriptBlock { cmd.exe /c "node server.js" }
+          node server.js
           echo "NODE_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
-          # Wait for server to respond before starting ngrok
-          $maxWait = 60  # max wait 60s
-          $waited = 0
-          $port = 9001
-          $serverReady = $false
-
-          while (-not $serverReady -and $waited -lt $maxWait) {
-              try {
-                  $resp = Invoke-WebRequest -Uri "http://localhost:$port" -UseBasicParsing -TimeoutSec 2
-                  if ($resp.StatusCode -eq 200 -or $resp.StatusCode -eq 404) {
-                      $serverReady = $true
-                      break
-                  }
-              } catch {}
-              Start-Sleep -Seconds 2
-              $waited += 2
-          }
-
-          if (-not $serverReady) {
-              Write-Error "Node server did not start within $maxWait seconds!"
-              exit 1
-          }
-          Write-Host "Node server is ready on port $port"
+          
 
           # Start ngrok once server is ready
-          Write-Host "Starting ngrok http $port..."
-          Start-Job -Name ngrokTunnel -ScriptBlock { cmd.exe /c "$env:NGROK_EXE http $port" }
+          Write-Host "Starting ngrok http..."
+          Start-Job -Name ngrokTunnel -ScriptBlock { cmd.exe /c "$env:NGROK_EXE http 9001" }
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
 
       - name: Wait 5h 52m
