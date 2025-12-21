@@ -49,9 +49,10 @@ jobs:
           # Give server a few seconds to start
           Start-Sleep -Seconds 5
 
-          # Start ngrok in background
-          Start-Job -Name ngrokTunnel -ScriptBlock { & "$env:NGROK_EXE" http 9001 }
+          # Start ngrok in background using Start-Process
+          Start-Process -FilePath $env:NGROK_EXE -ArgumentList "http 9001" -NoNewWindow
           echo "NGROK_STARTED=$(Get-Date)" >> $env:GITHUB_ENV
+          Write-Host "ngrok started"
 
       - name: Wait 5h 52m
         shell: powershell
@@ -68,7 +69,6 @@ jobs:
       - name: Stop Node & ngrok
         shell: powershell
         run: |
-          Get-Job -Name ngrokTunnel | Stop-Job -Force
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
 
