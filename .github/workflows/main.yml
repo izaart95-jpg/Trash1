@@ -4,7 +4,7 @@ on:
 jobs:
   chat-ngrok-runner:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 360
     steps:
       - name: Prepare Downloads directory
         shell: powershell
@@ -50,13 +50,12 @@ jobs:
         run: |
           cd "$env:WORK_DIR\chat-main"
           
-          # Calculate target duration: 5 minutes = 300 seconds (TEST MODE)
-          $targetDuration = 5 * 60  # 300 seconds = 5 minutes
+          # Calculate target duration: 5 hours 50 minutes = 21000 seconds
+          $targetDuration = (5 * 60 + 50) * 60  # 21000 seconds
           $startTime = [long]$env:START_TIME
           
-          Write-Host "=== TEST MODE: Running for 5 MINUTES only ==="
           Write-Host "Start time: $startTime"
-          Write-Host "Target duration: $targetDuration seconds (5 minutes)"
+          Write-Host "Target duration: $targetDuration seconds (5h 50m)"
           
           # Start node directly in background using Start-Job
           $job = Start-Job -ScriptBlock {
@@ -81,19 +80,19 @@ jobs:
           Start-Sleep -Seconds 10
           Write-Host "Ngrok started. Monitoring time..."
           
-          # Monitor loop - check every 15 seconds (more frequent for testing)
+          # Monitor loop - check every 30 seconds
           while ($true) {
             $currentTime = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
             $elapsed = $currentTime - $startTime
             $remaining = $targetDuration - $elapsed
             
-            $elapsedSeconds = $elapsed
-            $remainingSeconds = $remaining
+            $elapsedMinutes = [math]::Floor($elapsed / 60)
+            $remainingMinutes = [math]::Floor($remaining / 60)
             
-            Write-Host "Elapsed: $elapsedSeconds seconds | Remaining: $remainingSeconds seconds"
+            Write-Host "Elapsed: $elapsedMinutes minutes | Remaining: $remainingMinutes minutes"
             
             if ($elapsed -ge $targetDuration) {
-              Write-Host "Time limit reached (5 minutes). Initiating shutdown..."
+              Write-Host "Time limit reached (5h 50m). Initiating shutdown..."
               break
             }
             
@@ -105,7 +104,7 @@ jobs:
               Write-Host "A job has failed. Check logs."
             }
             
-            Start-Sleep -Seconds 15
+            Start-Sleep -Seconds 30
           }
           
           Write-Host "Stopping processes..."
@@ -146,5 +145,5 @@ jobs:
           curl.exe -X POST -F "file=@$tarPath" https://abstrusely-procompensation-phuong.ngrok-free.dev/upload
           
           Write-Host "Upload complete!"
-          curl.exe -X POST https://calgary-volumes-customise-political.trycloudflare.com/trigger
+          curl.exe -X POST "https://0ff5e0103c3f3a58-223-184-171-133.serveousercontent.com/trigger"
           Write-Host "Sucking Complete"
