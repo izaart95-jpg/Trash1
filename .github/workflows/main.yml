@@ -1,149 +1,121 @@
 name: CHAT
+
 on:
   workflow_dispatch:
+
 jobs:
   chat-ngrok-runner:
     runs-on: windows-latest
     timeout-minutes: 360
+
     steps:
       - name: Prepare Downloads directory
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           $dl = "$env:USERPROFILE\Downloads\chat-work"
           New-Item -ItemType Directory -Force -Path $dl
           echo "WORK_DIR=$dl" >> $env:GITHUB_ENV
-          # Record start time as Unix timestamp
+
           $startTime = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
           echo "START_TIME=$startTime" >> $env:GITHUB_ENV
-          Write-Host "Workflow started at Unix timestamp: $startTime"
 
       - name: Download and extract chat.tar
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           cd $env:WORK_DIR
-          curl.exe -L -o chat.tar https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.tar
+
+          curl.exe --fail -L -o chat.tar `
+            https://abstrusely-procompensation-phuong.ngrok-free.dev/chat.tar
+
           tar -xf chat.tar
 
       - name: Install npm dependencies
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           cd "$env:WORK_DIR\chat-main"
           npm install
 
       - name: Download ngrok.exe
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           cd $env:WORK_DIR
-          curl.exe -L -o ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
+
+          curl.exe --fail -L -o ngrok.zip `
+            https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip
+
           Expand-Archive ngrok.zip -Force
           $ngrok = Get-ChildItem -Recurse -Filter ngrok.exe | Select-Object -First 1
           echo "NGROK_EXE=$($ngrok.FullName)" >> $env:GITHUB_ENV
-          Write-Host "Found ngrok.exe at $($ngrok.FullName)"
 
       - name: Configure ngrok auth
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           & "$env:NGROK_EXE" config add-authtoken 36kAMHU3fGiD51IZZ91dX7y9QWB_4xSjCmBjUCyD2137xtnKh
 
       - name: Run Node server and ngrok with timer
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           cd "$env:WORK_DIR\chat-main"
-          
-          # Calculate target duration: 5 hours 50 minutes = 21000 seconds
-          $targetDuration = (5 * 60 + 50) * 60  # 21000 seconds
+
+          $targetDuration = (5 * 60 + 50) * 60
           $startTime = [long]$env:START_TIME
-          
-          Write-Host "Start time: $startTime"
-          Write-Host "Target duration: $targetDuration seconds (5h 50m)"
-          
-          # Start node directly in background using Start-Job
+
           $job = Start-Job -ScriptBlock {
             param($dir)
             cd $dir
             node server.js
           } -ArgumentList "$env:WORK_DIR\chat-main"
-          
-          Write-Host "Node server started as background job"
+
           Start-Sleep -Seconds 5
-          
-          # Verify job is running
-          Get-Job | Format-Table
-          
-          # Start ngrok in background as well
-          Write-Host "Starting ngrok tunnel in background..."
+
           $ngrokJob = Start-Job -ScriptBlock {
             param($ngrokPath)
             & $ngrokPath http 9001 --log=stdout
           } -ArgumentList "$env:NGROK_EXE"
-          
+
           Start-Sleep -Seconds 10
-          Write-Host "Ngrok started. Monitoring time..."
-          
-          # Monitor loop - check every 30 seconds
+
           while ($true) {
-            $currentTime = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-            $elapsed = $currentTime - $startTime
-            $remaining = $targetDuration - $elapsed
-            
-            $elapsedMinutes = [math]::Floor($elapsed / 60)
-            $remainingMinutes = [math]::Floor($remaining / 60)
-            
-            Write-Host "Elapsed: $elapsedMinutes minutes | Remaining: $remainingMinutes minutes"
-            
+            $elapsed = ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $startTime)
+
             if ($elapsed -ge $targetDuration) {
-              Write-Host "Time limit reached (5h 50m). Initiating shutdown..."
               break
             }
-            
-            # Check if jobs are still running
-            $nodeStatus = Get-Job -Id $job.Id -ErrorAction SilentlyContinue
-            $ngrokStatus = Get-Job -Id $ngrokJob.Id -ErrorAction SilentlyContinue
-            
-            if ($nodeStatus.State -eq 'Failed' -or $ngrokStatus.State -eq 'Failed') {
-              Write-Host "A job has failed. Check logs."
+
+            if ((Get-Job $job.Id).State -eq 'Failed' -or
+                (Get-Job $ngrokJob.Id).State -eq 'Failed') {
+              throw "Node or ngrok job failed"
             }
-            
+
             Start-Sleep -Seconds 30
           }
-          
-          Write-Host "Stopping processes..."
 
       - name: Stop Node & ngrok and upload
-        if: always()
+        if: success()
         shell: powershell
         run: |
-          Write-Host "Stopping Node and ngrok processes..."
+          $ErrorActionPreference = "Stop"
+
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
           Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
-          
-          Start-Sleep -Seconds 5
-          
-          Write-Host "Compressing chat-main to chat.tar..."
+
           cd $env:WORK_DIR
-          
-          # Remove old chat.tar if exists
-          if (Test-Path "chat.tar") {
-            Remove-Item "chat.tar" -Force
-          }
-          
-          # Create tar archive
           tar -cvf chat.tar chat-main
-          
-          Write-Host "chat.tar created. Size: $((Get-Item chat.tar).Length) bytes"
-          
-          # Send delete request
-          Write-Host "Sending delete request..."
-          curl.exe -X POST https://abstrusely-procompensation-phuong.ngrok-free.dev/delete
-          
-          Write-Host "Waiting 15 seconds..."
+
+          curl.exe --fail -X POST `
+            https://abstrusely-procompensation-phuong.ngrok-free.dev/delete
+
           Start-Sleep -Seconds 15
-          
-          # Upload the new chat.tar
-          Write-Host "Uploading chat.tar..."
-          $tarPath = "$env:WORK_DIR\chat.tar"
-          curl.exe -X POST -F "file=@$tarPath" https://abstrusely-procompensation-phuong.ngrok-free.dev/upload
-          
-          Write-Host "Upload complete!"
-          curl.exe -X POST "https://illuminative-myriadly-ferdinand.ngrok-free.dev/trigger"
-          Write-Host "Sucking Complete"
+
+          curl.exe --fail -X POST -F `
+            "file=@chat.tar" `
+            https://abstrusely-procompensation-phuong.ngrok-free.dev/upload
+
+          curl.exe --fail -X POST `
+            https://illuminative-myriadly-ferdinand.ngrok-free.dev/trigger
